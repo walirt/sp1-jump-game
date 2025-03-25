@@ -56,7 +56,7 @@ fn main() {
 
     if args.execute {
         // Execute the program
-        let (output, report) = client.execute(WIN_ELF, &stdin).compress().run().unwrap();
+        let (output, report) = client.execute(WIN_ELF, &stdin).compressed().run().unwrap();
         println!("Program executed successfully.");
 
         // Read the output.
