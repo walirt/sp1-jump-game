@@ -56,7 +56,7 @@ fn main() {
 
     if args.execute {
         // Execute the program
-        let (output, report) = client.execute(WIN_ELF, &stdin).compressed().run().unwrap();
+        let (output, report) = client.execute(WIN_ELF, &stdin).run().unwrap();
         println!("Program executed successfully.");
 
         // Read the output.
@@ -78,6 +78,7 @@ fn main() {
         // Generate the proof
         let proof = client
             .prove(&pk, &stdin)
+            .compressed()
             .run()
             .expect("failed to generate proof");
 
