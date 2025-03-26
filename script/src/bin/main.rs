@@ -10,9 +10,8 @@
 //! RUST_LOG=info cargo run --release -- --prove
 //! ```
 
-use alloy_sol_types::SolType;
 use clap::Parser;
-use win_lib::PublicValuesStruct;
+use win_lib::win;
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
 
 /// The ELF (executable and linkable format) file for the Succinct RISC-V zkVM.
@@ -56,16 +55,16 @@ fn main() {
 
     if args.execute {
         // Execute the program
-        let (output, report) = client.execute(WIN_ELF, &stdin).run().unwrap();
+        let (mut results, report) = client.execute(WIN_ELF, &stdin).run().unwrap();
         println!("Program executed successfully.");
 
         // Read the output.
-        let decoded = PublicValuesStruct::abi_decode(output.as_slice(), true).unwrap();
-        let PublicValuesStruct { n, result } = decoded;
+        let n = results.read::<u32>(); 
+        let result = results.read::<bool>();
         println!("n: {}", n);
         println!("result: {}", result);
 
-        let expected_result = win_lib::win(n);
+        let expected_result = win(n);
         assert_eq!(expected_result, result);
         println!("Values are correct!");
 
