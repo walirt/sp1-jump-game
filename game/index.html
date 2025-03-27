@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>sp1-jump-game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid black;
+            width: 960px;
+            height: 540px;
+            background: url('/assets/backgroud.png'); 
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-size: 100% 100%;
+            background-color: #464646;
+        }
+        #consoleWindow {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            border: 1px solid white;
+            width: 400px;
+            height: 300px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        #closeButton {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="consoleWindow">
+        <pre id="consoleOutput"></pre>
+        <button id="closeButton" style="display: none;">Close</button>
+    </div>
+    <script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 960;
+canvas.height = 540;
+
+const playerImage = new Image();
+playerImage.src = '/assets/player.png';
+
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 40;
+        this.originalHeight = 80;
+        this.height = this.originalHeight;
+        this.isCharging = false;
+        this.isReleasing = false;
+        this.chargeTime = 0;
+        this.maxCharge = 1000;
+        this.baseY = y;
+        this.rotation = 0;
+        this.isJumping = false;
+        this.springOffset = 0;
+        this.springMax = 40;
+        this.chargeStartTime = 0;
+        this.releaseTime = 0;
+        this.frequency = 5;
+        this.dampingRatio = 0.3;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y - this.height / 2);
+
+        if (this.isCharging) {
+            const elapsed = Date.now() - this.chargeStartTime;
+            const chargeProgress = Math.min(elapsed / this.maxCharge, 1);
+            this.springOffset = -this.springMax * chargeProgress;
+            this.height = this.originalHeight * (1 - chargeProgress * 0.5);
+        } else if (this.isReleasing) {
+            const elapsed = (Date.now() - this.releaseTime) / 1000;
+            const gamma = this.dampingRatio * 2 * Math.PI * this.frequency;
+            const omega = 2 * Math.PI * this.frequency;
+            const amplitude = -this.springMax * (this.chargeTime / this.maxCharge);
+            this.springOffset = amplitude * Math.exp(-gamma * elapsed) * Math.cos(omega * elapsed);
+            this.height += (this.originalHeight - this.height) * 0.1;
+            if (Math.abs(this.springOffset) < 0.1 && Math.abs(this.height - this.originalHeight) < 0.1) {
+                this.isReleasing = false;
+                this.springOffset = 0;
+                this.height = this.originalHeight;
+            }
+        } else {
+            this.springOffset = 0;
+            this.height = this.originalHeight;
+        }
+
+        ctx.translate(0, this.springOffset);
+        ctx.rotate(this.rotation);
+
+        if (playerImage.complete) {
+            ctx.drawImage(playerImage, -this.width / 2, -this.height / 2, this.width, this.height);
+        } else {
+            ctx.fillStyle = this.isCharging ? 'red' : 'blue';
+            ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+        }
+
+        ctx.restore();
+    }
+
+    charge() {
+        this.isCharging = true;
+        this.isReleasing = false;
+        this.chargeStartTime = Date.now();
+        this.chargeTime = 0;
+    }
+
+    jump(callback) {
+        this.isCharging = false;
+        this.isReleasing = true;
+        this.releaseTime = Date.now();
+        this.chargeTime = Math.min(this.chargeTime, this.maxCharge);
+        const jumpDistance = (this.chargeTime / this.maxCharge) * 800;
+        const jumpHeight = 200;
+        const duration = 1000;
+        const startTime = Date.now();
+        const startX = this.x;
+        const startY = this.y;
+        const rotationSpeed = Math.PI * 2 / (duration / 1000);
+
+        const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            this.x = startX + jumpDistance * progress;
+            this.y = startY - jumpHeight * 4 * progress * (1 - progress);
+            this.rotation = (elapsed / 1000) * rotationSpeed;
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                this.y = this.baseY;
+                this.rotation = 0;
+                this.isJumping = false;
+                callback(this.x, this.x + this.width);
+            }
+        };
+        requestAnimationFrame(animate);
+    }
+}
+
+const platformImage = new Image();
+platformImage.src = '/assets/platform.png';
+
+class Platform {
+    constructor(x, y, width) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = 40;
+    }
+
+    draw() {
+        if (platformImage.complete) {
+            ctx.drawImage(platformImage, this.x, this.y, this.width, this.height);
+        } else {
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+    }
+}
+
+class Firework {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.particles = [];
+        this.createParticles();
+    }
+
+    createParticles() {
+        const particleCount = 30;
+        for (let i = 0; i < particleCount; i++) {
+            const angle = (Math.PI * 2) * (i / particleCount);
+            const speed = 2 + Math.random() * 2;
+            this.particles.push({
+                x: this.x,
+                y: this.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                alpha: 1,
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`
+            });
+        }
+    }
+
+    update() {
+        this.particles.forEach(particle => {
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+            particle.vy += 0.1;
+            particle.alpha -= 0.01;
+        });
+        this.particles = this.particles.filter(p => p.alpha > 0);
+    }
+
+    draw() {
+        this.particles.forEach(particle => {
+            ctx.fillStyle = particle.color;
+            ctx.globalAlpha = particle.alpha;
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+    }
+}
+
+let player;
+let platforms;
+let score;
+let gameState;
+let chargeStartTime;
+let fireworks = [];
+const maxPlatforms = 11;
+let maxPlatformWidth = 120;
+
+function initGame() {
+    score = 0;
+    player = new Player(50, canvas.height - 20);
+    platforms = [new Platform(0, canvas.height - 40, 100)];
+    platforms.push(generateNewPlatform());
+    gameState = 'playing';
+    fireworks = [];
+    document.getElementById('consoleWindow').style.display = 'none';
+}
+
+function generateNewPlatform() {
+    const currentPlatform = platforms[1] || platforms[0];
+    const minGap = 50;
+    const maxGap = 680;
+    const gap = minGap + Math.random() * (maxGap - minGap);
+    const newX = currentPlatform.x + currentPlatform.width + gap;
+    const width = maxPlatformWidth - (score || 0) * 5;
+    return new Platform(newX, canvas.height - 40, width);
+}
+
+function scrollScene(callback) {
+    const targetX = -platforms[1].x + 50;
+    const duration = 300;
+    const startTime = Date.now();
+    const initialPositions = platforms.map(p => p.x);
+    const initialPlayerX = player.x;
+
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        platforms.forEach((platform, index) => {
+            platform.x = initialPositions[index] + targetX * progress;
+        });
+        player.x = initialPlayerX + targetX * progress;
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            callback();
+        }
+    };
+    requestAnimationFrame(animate);
+}
+
+function down() {
+    if (gameState === 'playing' && !player.isJumping) {
+        player.charge();
+        chargeStartTime = Date.now();
+    }
+}
+
+function up() {
+    if (gameState === 'playing' && player.isCharging) {
+        document.removeEventListener('mousedown', down);
+        document.removeEventListener('mouseup', up);
+        player.chargeTime = Math.min(Date.now() - chargeStartTime, player.maxCharge);
+        player.jump((leftX, rightX) => {
+            const targetPlatform = platforms[1];
+            const isOnPlatform = (leftX < targetPlatform.x + targetPlatform.width) && (rightX > targetPlatform.x);
+            if (isOnPlatform) {
+                score++;
+                if (score < maxPlatforms - 1) {
+                    scrollScene(() => {
+                        platforms[0] = platforms[1];
+                        platforms[1] = generateNewPlatform();
+                    });
+                } else {
+                    gameState = 'victory';
+                    createFireworks();
+                }
+            } else {
+                gameState = 'ended';
+            }
+            document.addEventListener('mousedown', down);
+            document.addEventListener('mouseup', up);
+        });
+    }
+}
+
+document.addEventListener('mousedown', down);
+document.addEventListener('mouseup', up);
+
+function createFireworks() {
+    for (let i = 0; i < 5; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height / 2;
+        fireworks.push(new Firework(x, y));
+    }
+}
+
+function drawVictoryScreen() {
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '30px Arial';
+    ctx.fillText('You won!', canvas.width / 2 - 70, canvas.height / 2 - 20);
+    drawRestartButton();
+    drawGenerateProofButton();
+}
+
+function drawRestartButton() {
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(canvas.width / 2 - 50, canvas.height / 2 + 20, 100, 40);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText('Restart', canvas.width / 2 - 32.5, canvas.height / 2 + 45);
+}
+
+function drawGenerateProofButton() {
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(canvas.width / 2 - 50, canvas.height / 2 + 70, 100, 40);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText('!Prove!', canvas.width / 2 - 32.5, canvas.height / 2 + 95);
+}
+
+function showConsoleWindow() {
+    const consoleWindow = document.getElementById('consoleWindow');
+    const consoleOutput = document.getElementById('consoleOutput');
+    const closeButton = document.getElementById('closeButton');
+    
+    consoleWindow.style.display = 'block';
+    consoleOutput.textContent = '';
+    closeButton.style.display = 'none';
+    
+    const ws = new WebSocket("ws://localhost:8080/proof");
+
+    ws.onopen = function(event) {
+        ws.send('GENERATE')
+    }
+    ws.onmessage = function(event) {
+        if (event.data === 'DONE') {
+            closeButton.style.display = 'block';
+            ws.close()
+        } else if (event.data === 'ERROR') {
+            consoleOutput.textContent += "Opps... please try again\n";
+            closeButton.style.display = 'block';
+            ws.close()
+        } 
+        else {
+            consoleOutput.textContent += event.data + "\n";
+        }
+    };
+    
+    closeButton.onclick = () => {
+        consoleWindow.style.display = 'none';
+    };
+}
+
+canvas.addEventListener('click', (event) => {
+    if (gameState === 'ended' || gameState === 'victory') {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        if (x >= canvas.width / 2 - 50 && x <= canvas.width / 2 + 50 &&
+            y >= canvas.height / 2 + 20 && y <= canvas.height / 2 + 60) {
+            initGame();
+        }
+        if (gameState === 'victory') {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            if (x >= canvas.width / 2 - 50 && x <= canvas.width / 2 + 50 &&
+                    y >= canvas.height / 2 + 70 && y <= canvas.height / 2 + 110) {
+                showConsoleWindow();
+            }
+        }
+    }
+});
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    platforms.forEach(platform => platform.draw());
+    player.draw();
+
+    if (gameState === 'ended') {
+        ctx.fillStyle = 'white';
+        ctx.font = '30px Arial';
+        ctx.fillText(`Game over, score: ${score}`, canvas.width / 2 - 100, canvas.height / 2 - 20);
+        drawRestartButton();
+    } else if (gameState === 'victory') {
+        drawVictoryScreen();
+        fireworks.forEach(firework => {
+            firework.update();
+            firework.draw();
+        });
+        fireworks = fireworks.filter(f => f.particles.length > 0);
+    } else {
+        ctx.fillStyle = 'white';
+        ctx.font = '20px Arial';
+        ctx.fillText(`Score：${score}`, canvas.width - 100, 40);
+    }
+
+    if (player.isCharging) {
+        player.chargeTime = Date.now() - chargeStartTime;
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+initGame();
+gameLoop();
+    </script>
+</body>
+</html>
