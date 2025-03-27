@@ -51,8 +51,6 @@ fn main() {
     let mut stdin = SP1Stdin::new();
     stdin.write(&args.n);
 
-    println!("n: {}", args.n);
-
     if args.execute {
         // Execute the program
         let (mut results, report) = client.execute(WIN_ELF, &stdin).run().unwrap();
@@ -71,6 +69,8 @@ fn main() {
         // Record the number of cycles executed.
         println!("Number of cycles: {}", report.total_instruction_count());
     } else {
+        println!("Proof generation in progress...");
+
         // Setup the program for proving.
         let (pk, vk) = client.setup(WIN_ELF);
 
@@ -82,6 +82,11 @@ fn main() {
             .expect("failed to generate proof");
 
         println!("Successfully generated proof!");
+
+        let vkey_hash = vk.bytes32();
+        let proof_bytes = proof.bytes().to_vec();
+        println!("proof: {}", hex::encode(proof_bytes));
+        println!("vkey_hash: {}", vkey_hash);
 
         // Verify the proof.
         client.verify(&proof, &vk).expect("failed to verify proof");
