@@ -28,7 +28,7 @@ func handleWebSocket(conn *websocket.Conn) {
 		var cmdStr string
 
 		if symbol == "GENERATE" {
-			cmdStr = "ping -c 5 127.0.0.1"
+			cmdStr = "cargo run --release -- --prove"
 		} else {
 			cmdStr = "cowsay"
 		}
@@ -46,19 +46,23 @@ func handleWebSocket(conn *websocket.Conn) {
 
 func executeCommand(conn *websocket.Conn, cmdName string, args []string) {
 	cmd := exec.Command(cmdName, args...)
+	cmd.Dir = "../prove"
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		log.Println("Get stdout error:", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("ERROR"))
 		return
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		log.Println("Get stderr error:", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("ERROR"))
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
+		log.Println("Start error:", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("ERROR"))
 		return
 	}
