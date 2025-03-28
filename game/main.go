@@ -66,7 +66,7 @@ func handleWebSocket(conn *websocket.Conn) {
 			waitingQueue = append(waitingQueue, &WaitingCommand{conn, cmdName, args})
 			position := len(waitingQueue)
 			queueMutex.Unlock()
-			conn.WriteMessage(websocket.TextMessage, []byte("WAITING: "+strconv.Itoa(position)))
+			conn.WriteMessage(websocket.TextMessage, []byte("Your current position in the queue: "+strconv.Itoa(position)))
 		}
 	}
 }
