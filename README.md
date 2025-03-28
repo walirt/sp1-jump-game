@@ -23,4 +23,13 @@ Use the left mouse button to control Freakybird to bounce, the longer you press,
 cd game
 go run main.go
 ```
+
+## Note
+
+Generating proofs defaults to mock mode, if you want to generate proofs locally, change `game/index.html`.
+```js
+const mock = false;
+```
+It communicates with the proof server using websocket.
+
 ## Have fun！
