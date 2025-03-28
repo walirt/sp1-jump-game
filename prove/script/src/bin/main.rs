@@ -80,12 +80,8 @@ fn main() {
             .compressed()
             .run()
             .expect("failed to generate proof");
-
         println!("Successfully generated proof!");
-
-        let vkey_hash = vk.bytes32();
-        println!("Verification key: {}", vkey_hash);
-
+        
         // Verify the proof.
         client.verify(&proof, &vk).expect("failed to verify proof");
         println!("Successfully verified proof!");
