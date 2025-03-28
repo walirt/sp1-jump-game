@@ -84,9 +84,7 @@ fn main() {
         println!("Successfully generated proof!");
 
         let vkey_hash = vk.bytes32();
-        let proof_bytes = proof.bytes().to_vec();
-        println!("proof: {}", hex::encode(proof_bytes));
-        println!("vkey_hash: {}", vkey_hash);
+        println!("Verification key: {}", vkey_hash);
 
         // Verify the proof.
         client.verify(&proof, &vk).expect("failed to verify proof");

@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -14,6 +16,21 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// Concurrency and queue management variables
+var (
+	maxConcurrency = 3
+	semaphore      = make(chan struct{}, maxConcurrency) // Semaphore to limit concurrency
+	waitingQueue   = make([]*WaitingCommand, 0)          // Queue for waiting commands
+	queueMutex     sync.Mutex                            // Mutex to protect the queue
+)
+
+// WaitingCommand represents a command waiting in the queue
+type WaitingCommand struct {
+	conn    *websocket.Conn
+	cmdName string
+	args    []string
 }
 
 func handleWebSocket(conn *websocket.Conn) {
@@ -40,11 +57,26 @@ func handleWebSocket(conn *websocket.Conn) {
 		cmdName := parts[0]
 		args := parts[1:]
 
-		go executeCommand(conn, cmdName, args)
+		// Attempt to acquire a slot or add to queue
+		select {
+		case semaphore <- struct{}{}: // Slot available, execute immediately
+			go executeCommand(conn, cmdName, args)
+		default: // No slot available, add to waiting queue
+			queueMutex.Lock()
+			waitingQueue = append(waitingQueue, &WaitingCommand{conn, cmdName, args})
+			position := len(waitingQueue)
+			queueMutex.Unlock()
+			conn.WriteMessage(websocket.TextMessage, []byte("WAITING: "+strconv.Itoa(position)))
+		}
 	}
 }
 
 func executeCommand(conn *websocket.Conn, cmdName string, args []string) {
+	defer func() {
+		<-semaphore // Release the slot
+		checkWaitingQueue()
+	}()
+
 	cmd := exec.Command(cmdName, args...)
 	cmd.Dir = "../prove"
 
@@ -94,6 +126,25 @@ func executeCommand(conn *websocket.Conn, cmdName string, args []string) {
 		conn.WriteMessage(websocket.TextMessage, []byte("ERROR"))
 	} else {
 		conn.WriteMessage(websocket.TextMessage, []byte("DONE"))
+	}
+}
+
+// checkWaitingQueue processes the next command in the queue when a slot becomes available
+func checkWaitingQueue() {
+	queueMutex.Lock()
+	if len(waitingQueue) > 0 {
+		nextCmd := waitingQueue[0]
+		waitingQueue = waitingQueue[1:]
+		// Update waiting positions for remaining commands
+		for i, cmd := range waitingQueue {
+			cmd.conn.WriteMessage(websocket.TextMessage, []byte("WAITING: "+strconv.Itoa(i+1)))
+		}
+		queueMutex.Unlock()
+		// Execute the next command
+		semaphore <- struct{}{} // Acquire a slot for the next command
+		go executeCommand(nextCmd.conn, nextCmd.cmdName, nextCmd.args)
+	} else {
+		queueMutex.Unlock()
 	}
 }
 
