@@ -233,6 +233,7 @@ let chargeStartTime;
 let fireworks = [];
 const maxPlatforms = 11;
 let maxPlatformWidth = 120;
+const mock = true;
 
 function initGame() {
     score = 0;
@@ -359,25 +360,48 @@ function showConsoleWindow() {
     consoleOutput.textContent = '';
     closeButton.style.display = 'none';
     
-    const ws = new WebSocket("ws://" + window.location.host + "/proof");
+    if (!mock) {
+        const ws = new WebSocket('ws://' + window.location.host + '/proof');
 
-    ws.onopen = function(event) {
-        ws.send('GENERATE')
-    }
-    ws.onmessage = function(event) {
-        if (event.data === 'DONE') {
-            closeButton.style.display = 'block';
-            ws.close()
-        } else if (event.data === 'ERROR') {
-            consoleOutput.textContent += "Opps... please try again\n";
-            closeButton.style.display = 'block';
-            ws.close()
-        } 
-        else {
-            consoleOutput.textContent += event.data + "\n";
+        ws.onopen = function(event) {
+            ws.send('GENERATE')
         }
-    };
-    
+        ws.onmessage = function(event) {
+            if (event.data === 'DONE') {
+                closeButton.style.display = 'block';
+                ws.close()
+            } else if (event.data === 'ERROR') {
+                consoleOutput.textContent += 'Opps... please try again\n';
+                closeButton.style.display = 'block';
+                ws.close()
+            } 
+            else {
+                consoleOutput.textContent += event.data + '\n';
+            }
+        };
+    } else {
+        const commands = [
+            'Initialization environment...',
+            'Proof generation in progress...',
+            'Successfully generated proof!',
+            'Successfully verified proof!'
+        ];
+            
+        let index = 0;
+        const interval = setInterval(() => {
+            if (index < commands.length) {
+                consoleOutput.textContent += commands[index] + '\n';
+                index++;
+            } else {
+                clearInterval(interval);
+            }
+        }, 2000);
+        
+        setTimeout(() => {
+            closeButton.style.display = 'block';
+        }, 9000);
+    }
+
     closeButton.onclick = () => {
         consoleWindow.style.display = 'none';
     };
