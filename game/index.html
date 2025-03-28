@@ -359,7 +359,7 @@ function showConsoleWindow() {
     consoleOutput.textContent = '';
     closeButton.style.display = 'none';
     
-    const ws = new WebSocket("ws://localhost:8080/proof");
+    const ws = new WebSocket("ws://" + window.location.host + "/proof");
 
     ws.onopen = function(event) {
         ws.send('GENERATE')
